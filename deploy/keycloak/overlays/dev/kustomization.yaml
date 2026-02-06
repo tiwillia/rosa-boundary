@@ -4,7 +4,47 @@ kind: Kustomization
 resources:
   - ../../base
   - cluster-secret-store.yaml
+  - secret-store.yaml
+  - service-account.yaml
+  - environment-config.yaml
 
 components:
+  - ../../components/rhbk-operator
   - ../../components/cnpg
   - ../../components/keycloak
+  - ../../components/external-secrets-config
+
+replacements:
+  # Replace AWS region in ClusterSecretStore
+  - source:
+      kind: ConfigMap
+      name: environment-config
+      fieldPath: data.AWS_REGION
+    targets:
+      - select:
+          kind: ClusterSecretStore
+          name: aws-ssm-keycloak
+        fieldPaths:
+          - spec.provider.aws.region
+
+  # Replace AWS region in SecretStore
+  - source:
+      kind: ConfigMap
+      name: environment-config
+      fieldPath: data.AWS_REGION
+    targets:
+      - select:
+          kind: SecretStore
+          name: aws-ssm
+        fieldPaths:
+          - spec.provider.aws.region
+
+patches:
+  # Replace service account role ARN using environment config
+  - patch: |-
+      - op: replace
+        path: /metadata/annotations/eks.amazonaws.com~1role-arn
+        value: arn:aws:iam::020150179993:role/dev-keycloak
+    target:
+      kind: ServiceAccount
+      name: external-secrets-sa

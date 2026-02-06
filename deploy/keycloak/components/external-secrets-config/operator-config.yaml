@@ -1,0 +1,13 @@
+apiVersion: operator.external-secrets.io/v1alpha1
+kind: OperatorConfig
+metadata:
+  name: external-secrets
+spec:
+  createOperator: true
+  installCRDs: false  # CRDs already installed by OLM
+  processClusterStore: true
+  processClusterExternalSecret: true
+  webhook:
+    create: true
+  certController:
+    create: true

@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: environment-config
+  namespace: keycloak
+data:
+  AWS_REGION: "us-east-2"
+  AWS_ACCOUNT_ID: "020150179993"
+  IRSA_ROLE_NAME: "dev-keycloak"
