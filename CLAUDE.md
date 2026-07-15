@@ -321,7 +321,7 @@ make localstack-down
 
 ### Prerequisites
 
-**macOS**: Podman machine running + `brew install podman-compose` + LocalStack Pro token in `tests/localstack/.env`
+**macOS**: Podman machine running + `brew install podman-compose` + `LOCALSTACK_AUTH_TOKEN` env var or `tests/localstack/.env`
 ```bash
 uv venv && source .venv/bin/activate && uv pip install pytest boto3 requests
 ```

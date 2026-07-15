@@ -54,10 +54,14 @@ clean:
 .PHONY: localstack-up localstack-down localstack-logs test-localstack test-localstack-fast
 
 localstack-up: ## Start LocalStack Pro with all services (podman)
-	@if [ ! -f tests/localstack/.env ]; then \
-		echo "ERROR: tests/localstack/.env not found"; \
-		echo "Copy .env.example to .env and add LOCALSTACK_AUTH_TOKEN"; \
-		exit 1; \
+	@if [ -z "$$LOCALSTACK_AUTH_TOKEN" ]; then \
+		if [ -f tests/localstack/.env ]; then \
+			echo "Loading LOCALSTACK_AUTH_TOKEN from tests/localstack/.env"; \
+		else \
+			echo "ERROR: LOCALSTACK_AUTH_TOKEN not set and tests/localstack/.env not found"; \
+			echo "Either export LOCALSTACK_AUTH_TOKEN or copy .env.example to .env"; \
+			exit 1; \
+		fi; \
 	fi
 	@echo "Ensuring podman is ready..."
 	@if [ "$$(uname)" = "Darwin" ]; then \

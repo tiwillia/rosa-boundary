@@ -68,13 +68,18 @@ uv pip install pytest boto3 requests
 
 ### Configuration
 
-```bash
-# Copy environment template
-cp .env.example .env
+The LocalStack Pro token can be provided via environment variable or `.env` file:
 
-# Add your LocalStack Pro token
-echo "LOCALSTACK_AUTH_TOKEN=your-token-here" >> .env
+```bash
+# Option 1: Export as environment variable
+export LOCALSTACK_AUTH_TOKEN=your-token-here
+
+# Option 2: Use a .env file
+cp .env.example .env
+# Edit .env and set LOCALSTACK_AUTH_TOKEN=your-token-here
 ```
+
+If `LOCALSTACK_AUTH_TOKEN` is set in the environment, the `.env` file is not required.
 
 ## Quick Start
 
@@ -277,8 +282,9 @@ GitHub Actions workflow (`.github/workflows/localstack-tests.yml`):
 # Check podman socket
 systemctl --user status podman.socket
 
-# Check LocalStack auth token
-cat .env | grep LOCALSTACK_AUTH_TOKEN
+# Check LocalStack auth token (env var or .env file)
+echo $LOCALSTACK_AUTH_TOKEN
+cat .env 2>/dev/null | grep LOCALSTACK_AUTH_TOKEN
 
 # View LocalStack logs
 make localstack-logs
