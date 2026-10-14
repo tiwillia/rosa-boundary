@@ -1,10 +1,10 @@
 # Staging Deployment via HCP Terraform
 
-> The [Trusted Actions monorepo PoC](trusted-actions-monorepo-poc.md) proposes
-> moving a *separately stateful* existing workload and meta-root into this
-> repository. It has **not** changed the staging workspace inventory below or
-> authorized a VCS/state handoff. Do not add the old Trusted Actions workspace
-> to Boundary's meta state or apply the PoC against staging as-is.
+> The [combined Terraform PoC](trusted-actions-monorepo-poc.md) adds a disabled
+> Trusted Actions module to the existing Boundary regional state. It does **not**
+> authorize a state handoff or apply: the former Trusted Actions workspace must
+> release objects without destruction before regional state can adopt them.
+> The workspace inventory below remains unchanged until that migration.
 
 The staging deployment of rosa-boundary runs in a dedicated AWS account (`rosa-boundary-stage`, `150100906299`) managed entirely through [HCP Terraform](https://app.terraform.io/app/hp-platform-engineering) (Terraform Cloud). Infrastructure changes are proposed, reviewed, and applied through the same PR workflow used for code changes -- no manual `terraform apply` runs.
 

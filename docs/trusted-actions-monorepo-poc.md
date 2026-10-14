@@ -1,143 +1,118 @@
-# Boundary + Trusted Actions monorepo PoC (2026-10-13)
+# Combined Boundary + Trusted Actions Terraform PoC (2026-10-14)
 
-## Decision and scope
+## Revised decision
 
-**Recommendation: colocate source and delivery definitions, not Terraform state.**
-This branch imports `openshift-online/rosa-trusted-actions` upstream `1d50516`
-into `services/trusted-actions/` (independent Go module), copies its AWS root to
-`deploy/trusted-actions/`, and places its HCP meta root in
-`hcp-terraform/rosa-trusted-actions/`. Boundary `main` was at upstream `c52a477`
-when this branch was created. The original Trusted Actions checkout was left
-intact; its extra local test commit is saved on
-`backup/local-main-before-upstream-sync`. No PR or AWS/HCP changes were made.
+The first PoC merely colocated Git source while keeping Trusted Actions in a
+separate workload state. That was not the requested deployment model. **This
+revision places both workloads in a single regional Terraform root/state**:
+`deploy/regional` calls `../trusted-actions` as a local module and passes the
+Boundary VPC/subnets, task security group, account/region, and provider. HCP's
+existing `rosa-boundary-stage-regional` workspace is the intended owner of both
+workloads. Trusted Actions source, Go module, and image remain separate because
+they are distinct binaries; that does not mean they deploy independently.
 
-| Owner / state | Resources | Dependency |
-|---|---|---|
-| `deploy/network` (Boundary stage network workspace) | One VPC, NAT, public/private subnets | Foundation |
-| `deploy/account` (Boundary stage account workspace) | Shared Boundary IAM/OIDC identities, budget, Bedrock agreements | Account-wide; **no copy in Trusted Actions** |
-| `deploy/regional` (Boundary stage regional workspace) | Fargate tasks and task SG, audit and investigation infrastructure | Network and account |
-| `deploy/trusted-actions` (proposed existing Trusted Actions stage workspace) | API ECS EC2 service, internal ALB, EBS/SQLite, S3, audit delivery, service IAM/Secrets Manager | Network and Boundary task SG |
+| Root/state | Owned resources |
+|---|---|
+| `deploy/account` | Account-wide Boundary IAM/OIDC identities, budget, model agreements |
+| `deploy/network` | One VPC, NAT, subnets and S3 endpoint for the account/region |
+| `deploy/regional` | Boundary Fargate, audit and investigations **and** Trusted Actions EC2/EBS, ECS service, internal ALB, logs, S3 and service IAM through `module.trusted_actions` |
 
-The Trusted Actions root still contains legacy *conditional* standalone-VPC
-resource declarations, but `vpc_id` is now required and the existing-network
-branch is selected. Before applying to a workspace with any previously managed
-VPC, inspect state: this change would propose deleting that VPC and needs a
-separate ownership transfer. Region-specific service IAM roles remain in the
-service root because their names are service-scoped. Do not duplicate Boundary
-account-wide roles, OIDC providers, budgets, or credential variable sets there.
-Separate roots avoid merging incompatible AWS provider major versions (Trusted
-Actions 5.x, Boundary 6.x) and prevent a single service edit from reconciling
-the other's state. A monorepo is **not** an automatic Terraform dependency graph.
+Existing account/network states stay separate: account-wide singleton
+lifecycles differ from per-region workload lifecycles. `deploy/trusted-actions`
+is now a **child module, not an independently executable root**. It inherits
+Boundary's AWS 6.x provider and its `allowed_account_ids` and tagging controls;
+the earlier Trusted Actions AWS 5.x provider block was removed. `config.tf`
+still reads the service YAML from the same checkout. The module gets Boundary's
+actual task SG ID directly, not a second-state name lookup. The imported
+standalone VPC/NAT/subnet definitions were removed; verify the former state
+does not own any of those resources before any old-workspace apply.
 
-## Private API proposal and limitations
+## Safety gate and private API
 
-The Trusted Actions ALB is changed from internet-facing on public subnets to
-**internal on two private subnets**; its sole listener is HTTPS/443 and requires
-an ACM certificate (no HTTP fallback). The ALB SG only accepts TCP 443 from the
-Boundary regional task SG looked up by name in the same VPC. The API's EC2 host
-accepts 8080 only from the ALB. The Boundary tasks' current broad egress allows
-them to reach the ALB without new egress rules. The ALB DNS name resolves to
-private addresses; clients outside the VPC cannot reach it by default.
+`enable_trusted_actions` is **false by default and explicitly false in the
+stage regional workspace variables**. A merge must not create duplicates of
+resources still managed by the old `rosa-trusted-actions-stage` workspace.
+The module has a private ALB in two private subnets, HTTPS listener only,
+mandatory ACM certificate, and SG ingress only from Boundary task SG on 443.
+The EC2 host receives 8080 only from that ALB. This is a network path, **not
+proof of caller identity**: IAM on SG attachment/ENIs and application JWT
+authorization still matter. No certificate or identity-scoped service credential
+strategy has been approved; do not enable the module or deploy it as-is.
 
-This restricts the *network path*, not callers: anyone who can attach the
-Boundary SG to another ENI, enter a task, or run inside the VPC with equivalent
-permissions may reach the API. Verify EC2/ENI/SG-attachment IAM, ECS Exec
-isolation, and JWT authorization separately. Trusted Actions still uses OCM/
-Backplane service credentials and its application auditor is a mock; it is not
-safe to claim task-specific identity or audited actions merely because the API
-is private. Do not put service credentials into Boundary EFS or S3 escrow.
-An ACM certificate with a DNS name usable **inside** the VPC must be provisioned
-before deployment; stage currently supplies none, so the proposed plan should
-fail closed at the listener precondition. Private DNS, client configuration,
-certificate rotation, JWT audience/issuer and allowed account/namespace policy
-need explicit design and end-to-end tests. No VPC peering/PrivateLink is needed
-for tasks in the same VPC. A future ALB replacement could interrupt service.
+The old Trusted Actions meta/workload workspaces are **not** managed or
+destroyed by this branch. The earlier proposal to move their VCS to the new
+repo was withdrawn (`hcp-terraform/rosa-trusted-actions/` has a README only).
+No HCP, AWS or Konflux registration was changed here.
 
-## HCP/state handoff, **not executed**
+## Non-destructive state migration required before enabling
 
-The copied Trusted Actions meta root keeps the separate `rosa-trusted-actions`
-HCP project and existing `rosa-trusted-actions-stage` workspace with manual
-apply. Its proposed VCS repo and working directory now point to
-`openshift-online/rosa-boundary` / `deploy/trusted-actions`, and its credential
-variable set name matches the Boundary-owned dynamic-credentials set. The
-Boundary AWS-credentials trust allowlist already lists the Trusted Actions
-project/workspace; **verify the actual attachment and trust in HCP**. Do not add
-this existing workspace to Boundary's meta module: two meta states would both
-manage it. Instead coordinate switching the existing meta-workspace VCS source
-once, keeping its HCP state and the workload workspace's state; do not create a
-second workspace. Ensure the moved meta-root module's own provider version and
-its VCS registration are reviewed before reconciling it. Copying files does not
-transfer Terraform state, Konflux component configuration, or ownership.
+1. Inventory live AWS resources, old Trusted Actions workload/meta state,
+   Boundary regional state, credentials, tags, provider versions, image digest
+   and names. Confirm the old workspace actually owns the existing resources;
+   source code and workspace definitions do not prove that. Freeze both
+   workspaces and preserve backups with access-controlled state handling.
+2. Resolve provider 5→6 differences and all old-to-new resource addresses,
+   e.g. `aws_lb.main` → `module.trusted_actions[0].aws_lb.main`. Coordinate a
+   **non-destructive release/import** (or controlled state transfer) for every
+   object; never apply a second state that tries to create the same ALB, S3
+   bucket, secret or IAM roles. Distinguish existing objects from deliberately
+   replaced ones (public ALB → private ALB, HTTP → HTTPS). Review the separate
+   deletion-protection/OPA gate and any unavoidable outage.
+3. Replace inherited `secrets.tf` behavior: it places supplied service-secret
+   values in Terraform state, which is not a suitable shared/long-lived
+   credential design. Require a reviewed rotation/identity-scoped approach,
+   an ACM certificate/private DNS name, explicit allowed accounts, and a
+   verifiable application audit pipeline before enabling.
+4. Through a PR update **only** the existing Boundary regional workspace's
+   Git-managed variables in `hcp-terraform/rosa-boundary/main.tf`, after the
+   handoff is staged and reviewed. Add the approved Trusted Actions image
+   digest, cert, bucket, endpoint/client settings, and enable gate. Keep the
+   manual-apply settings, compare speculative/final plans and verify one owner
+   per resource before approving any HCP apply. Retire the old workload/meta
+   workspaces only after the new state is correct and live evidence is saved.
+5. Verify private reachability *from a Boundary ECS task*, denial from an
+   unauthorized source, TLS/JWT, logs and cleanup. No such test has run.
 
-Suggested gated sequence for maintainers:
+**Multi-region blocker:** inherited Trusted Actions IAM roles, ECS cluster,
+ALB and some bucket names use account-global or fixed `app_name` values.
+For each additional region choose an account-owned shared identity with
+region-qualified resource policies, or adopt unique region-qualified names
+without changing existing stage identities. Do not deploy a second regional
+module until these collisions are resolved. The EC2/EBS/SQLite singleton also
+requires an HA and recovery decision before GA.
 
-1. Inventory both live HCP meta/workload states and AWS account/region, including
-   ALB, target groups/listeners, S3 bucket, Secrets Manager, service roles,
-   public/private subnet IDs, SG names and IAM trust. Resolve any duplicate
-   ownership and preserve resource addresses in the *existing* workload state.
-2. Review infrastructure and security plan **before** switching VCS. Verify the
-   selected repository/working directory exists on `main`; suspend competing
-   runs and move the existing meta-workspace VCS pointer only after the code is
-   published. Keep manual applies; do not create a new service state.
-3. In Git-managed meta variables, set a valid ACM cert/DNS, any required secret
-   references and allowed-account policy. Confirm the actual credential set and
-   account guard, and compare proposed replaces/deletes (especially ALB/public
-   listener) to the inventory. Never put long-lived credentials in Git or
-   Terraform secret-version state; replace the inherited credential provisioning
-   path with a reviewed identity-scoped/rotation design before production.
-4. Configure the Konflux component to use the Boundary repository and migrated
-   `.tekton` path-context. Verify build architectures, image digest, SBOM/policy
-   checks and working image; update the Git-managed image pin in the service
-   meta root. Test TLS routing from a Boundary task and denial from unauthorized
-   VPC sources; inspect ALB and app audit logs. Roll back VCS/infra in a reviewed
-   sequence if necessary; ALB replacement is not a no-downtime migration.
+## Image terminology
 
-## Contributor costs and open blockers
+The current stage Boundary task image is a Quay **tag named after a Git commit**,
+e.g. `rosa-boundary:<commit-sha>`. This records which source commit was built,
+but a tag is a mutable registry pointer and could later reference different
+bytes. The old Trusted Actions workspace uses `rosa-trusted-actions@sha256:…`,
+an OCI **manifest digest** that addresses specific published image content.
+These were inherited deployment configuration choices, not a technical
+requirement of a monorepo. Both components can use verified digests, with Git
+SHA recorded separately for provenance; architecture/platform of each digest
+must be checked. The revised regional module input requires a digest when
+enabled. CI/Konflux must register the moved Trusted Actions pipeline against
+the combined repo and release the second image independently.
 
-- Two Go modules/toolchains: root Boundary targets do not test the Trusted
-  Actions tree. Trusted Actions `go.mod` requires Go 1.26; its old module path is
-  retained to avoid an unrelated import/API migration. If publishing module
-  packages from this repository, plan an import-path rename and downstream
-  migration. Its `make build` and `make test` also run npm/OpenAPI generation;
-  committed generated Go lets direct `go test ./...` work without npm.
-- Two images and release cadences: root `.tekton` has a Trusted Actions pipeline
-  with service-specific build context, but **Konflux registration is external**.
-  Commit-SHA pinning for Boundary and image-digest pinning for Trusted Actions
-  must be coordinated; sharing Git does not imply a single deploy or release.
-  Trusted Actions' inherited image uses `hi/go:latest` and `hi/core-runtime:latest`
-  and its pipeline builds x86_64 only; review base-image pinning and
-  architecture/support policy before production use.
-- Several HCP Terraform roots and meta roots require disciplined single-owner
-  workspace/variable management, cross-root dependencies and ordering. The
-  Trusted Actions root uses AWS provider 5.x; upgrading it to Boundary's 6.x
-  needs separate migration review. `deploy/trusted-actions/config.tf` reads
-  `services/trusted-actions/config/config.yaml` relative to the module, so HCP
-  must fetch the whole repo. Service `docs/deployment.md` describes a later
-  Aurora/Fargate design not implemented by the inherited EC2/SQLite Terraform.
-- Stage's inherited `backplane_client_secret` input is required but not in its
-  HCP variables; `secrets.tf` stores supplied secret material in Terraform state
-  and enables immediate secret deletion. The default account allowlist is empty,
-  Trusted Actions S3 WORM is off, and application audit integration is not
-  complete. These are **deployment blockers**, not PoC endorsements.
-- Legacy `vpc.tf` still includes conditional VPC resources; eventually remove
-  them with an explicit state inventory and `removed`/import handoff if relevant.
-  Stage private subnets must span two AZs. An internal ALB + cert requires DNS
-  and a documented Boundary task API client path (and approved reachability for
-  operational diagnostics). No live task/ALB/IAM/ABAC evidence was collected.
+## Contributor experience and local evidence
 
-## Local evidence
-
-- `cd services/trusted-actions && go test ./...`: passed (Go 1.27.1, upstream
-  Trusted Actions module and committed generated API code).
-- `cd services/trusted-actions && go build ./cmd/server ./cmd/action-cli`:
-  passed (compile only, no image/runtime test).
-- `cd deploy/trusted-actions && terraform init -backend=false -input=false &&
-  terraform validate`: passed with AWS provider 5.100.0 and random 3.9.1.
-- `terraform fmt -check -recursive` on both migrated roots: passed. The HCP
-  meta-root `terraform init -backend=false` was attempted but the private
-  workspace module registry returned 401 (no registry credentials here), so
-  **meta-root validate is unverified**.
-- No `terraform plan` (would require approved account/stage vars, certificate,
-  secret strategy and state), no image build, no AWS or HCP mutation, and no
-  validation of private network behavior. This document reports source design,
-  **not** a live deployment result.
+- Two Go modules, build contexts, image release streams and test suites remain.
+  Root `go test ./...` does **not** test the Trusted Actions module. Its old Go
+  module path is retained for compatibility and needs a deliberate rename if
+  the packages are published from the combined repository.
+- Regional changes can affect both workloads in one plan. Always inspect the
+  `module.trusted_actions[0]` addresses, generated image/config and secret
+  exposure; the regional Makefile is for local dev only, while staging HCP
+  executes Terraform directly. Upstream Trusted Actions Aurora/Fargate docs
+  describe a future target, not the inherited EC2/SQLite implementation.
+- `terraform init -backend=false -input=false` and `terraform validate` in
+  `deploy/regional` passed with AWS provider 6.58.0 (module included), as did
+  formatting of changed files. Mocked `terraform test` exercises both the
+  disabled default and an enabled combined-module plan; mocks do not prove
+  provider/API compatibility or live network isolation. Prior PoC
+  `go test ./...` and `go build` in
+  `services/trusted-actions` passed; no Go behavior changed in this revision.
+  **No Terraform plan, AWS/HCP apply, image build, or live network/security
+  assertion** was performed. The prior separate meta-root registry validation
+  failed with 401, but that meta root is no longer part of this design.

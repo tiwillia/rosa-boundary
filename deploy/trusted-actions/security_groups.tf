@@ -7,7 +7,7 @@ resource "aws_security_group" "alb" {
     from_port       = 443
     to_port         = 443
     protocol        = "tcp"
-    security_groups = [data.aws_security_group.boundary_tasks.id]
+    security_groups = [var.boundary_task_security_group_id]
   }
 
   tags = { Name = "${var.app_name}-alb-sg" }

@@ -3,7 +3,8 @@
 This branch colocates two independently built services: Boundary's ephemeral
 investigation environment and the [Trusted Actions API](services/trusted-actions/README.md).
 This is a **local proof of concept**, not a deployed or approved integration.
-Trusted Actions has its own Go module, image, tests, and regional workload state.
+Trusted Actions has its own Go module, image and tests; **both workloads use
+one regional Terraform root/state** after an explicitly reviewed state handoff.
 The existing Boundary account and network roots remain the only owners of their
 AWS resources. See [the migration report](docs/trusted-actions-monorepo-poc.md)
 before changing workspaces or attempting an apply.
@@ -11,10 +12,11 @@ before changing workspaces or attempting an apply.
 | Component | Source | Terraform root | Build/test |
 |---|---|---|---|
 | Boundary | `cmd/`, `internal/`, `lambda/`, root `Containerfile` | `deploy/account`, `deploy/network`, `deploy/regional` | root `Makefile` |
-| Trusted Actions | `services/trusted-actions/` | `deploy/trusted-actions` | `make trusted-actions-build`, `make trusted-actions-test`, `make trusted-actions-image` |
+| Trusted Actions | `services/trusted-actions/` | `deploy/regional` → `deploy/trusted-actions` module | `make trusted-actions-build`, `make trusted-actions-test`, `make trusted-actions-image` |
 
-Terraform roots have separate state despite sharing a Git repository. Trusted
-Actions depends on the Boundary network and regional task security group; its
+Account/network states stay separate, but the regional workspace deploys both
+workloads when the gated Trusted Actions module is enabled. Trusted Actions uses
+the Boundary network and regional task security group; its
 ALB is configured as internal with TLS-only ingress from that group. The API
 still validates JWTs; network reachability alone is **not** caller authorization.
 

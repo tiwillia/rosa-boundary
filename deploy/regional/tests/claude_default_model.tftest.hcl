@@ -10,6 +10,9 @@
 # the input-variable validation under test.
 
 mock_provider "aws" {
+  mock_data "aws_iam_policy_document" {
+    defaults = { json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+  }
   # IAM is now read via data sources, so supply valid ARNs at plan time.
   mock_data "aws_iam_role" {
     defaults = { arn = "arn:aws:iam::123456789012:role/rosa-boundary-test" }
@@ -41,6 +44,12 @@ override_data {
     partition = "aws"
     id        = "aws"
   }
+}
+
+override_resource {
+  target          = aws_security_group.fargate
+  override_during = plan
+  values          = { id = "sg-0123456789abcdef0" }
 }
 
 # Two subnets in the same VPC, one per AZ (satisfies the Bedrock endpoint
@@ -76,6 +85,40 @@ override_data {
 
 # Approved: the Sonnet 5 inference profile maps to foundation model
 # anthropic.claude-sonnet-5, which is approved -> validation succeeds.
+run "trusted_actions_off_until_state_handoff" {
+  command = plan
+
+  assert {
+    condition     = length(module.trusted_actions) == 0 && output.trusted_actions_private_alb_dns_name == null
+    error_message = "The combined regional root must not deploy Trusted Actions before the state handoff gate is enabled."
+  }
+}
+
+run "trusted_actions_combined_module_plans_under_mock" {
+  command = plan
+
+  variables {
+    enable_trusted_actions                  = true
+    trusted_actions_container_image         = "example.com/trusted-actions@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    trusted_actions_s3_bucket_name          = "example-trusted-actions-test"
+    trusted_actions_backplane_url           = "https://backplane.example.com"
+    trusted_actions_backplane_client_id     = "test-client"
+    trusted_actions_backplane_client_secret = "mock-only-not-a-real-secret"
+    trusted_actions_alb_certificate_arn     = "arn:aws:acm:us-east-1:123456789012:certificate/11111111-1111-1111-1111-111111111111"
+    trusted_actions_allowed_accounts        = "123456789012"
+  }
+
+  assert {
+    condition     = length(module.trusted_actions) == 1
+    error_message = "Enabled regional deployment must contain the Trusted Actions child module."
+  }
+
+  assert {
+    condition     = module.trusted_actions[0].alb_internal && module.trusted_actions[0].alb_ingress_source_security_group_id == aws_security_group.fargate.id
+    error_message = "Trusted Actions must use an internal ALB and the Boundary task security group."
+  }
+}
+
 run "approved_sonnet5_profile_succeeds" {
   command = plan
 

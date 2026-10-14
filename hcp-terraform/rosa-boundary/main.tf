@@ -250,6 +250,13 @@ module "rosa_boundary" {
       variable_set_names     = ["rosa-boundary-rosa-boundary-stage-default-aws-dynamic-creds"]
       variables = [
         {
+          # Explicit hold: do not propose Trusted Actions creates against the
+          # legacy workspace's existing resources before state handoff.
+          key      = "enable_trusted_actions"
+          value    = "false"
+          category = "terraform"
+        },
+        {
           # ROSAENG-68790: match the account workspace's shared IAM role prefix.
           key      = "account_role_name_prefix"
           value    = "rosa-boundary-stage"

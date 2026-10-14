@@ -7,16 +7,6 @@ variable "vpc_id" {
   }
 }
 
-variable "public_subnet_ids" {
-  description = "IDs of two existing public subnets (used by the ALB). Required when vpc_id is set."
-  type        = list(string)
-  default     = []
-  validation {
-    condition     = length(var.public_subnet_ids) == 0 || length(var.public_subnet_ids) >= 2
-    error_message = "public_subnet_ids must contain at least two subnet IDs (ALB requires subnets in two AZs)."
-  }
-}
-
 variable "private_subnet_ids" {
   description = "IDs of existing private subnets (EC2 host in [0], optional second AZ in [1]). Required when vpc_id is set."
   type        = list(string)
@@ -40,6 +30,11 @@ variable "aws_account_id" {
     condition     = can(regex("^[0-9]{12}$", var.aws_account_id))
     error_message = "aws_account_id must be a 12-digit AWS account ID."
   }
+}
+
+variable "boundary_task_security_group_id" {
+  description = "Boundary Fargate SG ID supplied by the parent regional root, not a cross-state name lookup"
+  type        = string
 }
 
 variable "default_tags" {

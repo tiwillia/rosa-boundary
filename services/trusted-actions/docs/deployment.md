@@ -2,7 +2,8 @@
 
 > Historical target-state design from the original repository, **not** the
 > deployed EC2/SQLite Terraform. The monorepo PoC moves the actual workload
-> root to `../../../deploy/trusted-actions/` and makes the ALB private;
+> resources into `../../../deploy/trusted-actions/` as a module of
+> `../../../deploy/regional/` and makes the ALB private;
 > see [the report](../../../docs/trusted-actions-monorepo-poc.md). Do not use
 > the commands or commit/tfvars advice below to deploy staging.
 

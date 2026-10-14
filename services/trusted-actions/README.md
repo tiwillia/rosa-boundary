@@ -4,7 +4,8 @@
 > `services/trusted-actions/` of rosa-boundary. From the repository root use
 > `make trusted-actions-test` or `make trusted-actions-build`; from this directory
 > use `make test` or `make build`. Deployment configuration is in
-> `../../deploy/trusted-actions/`; the upstream deployment guide below is
+> `../../deploy/regional/` with the `../trusted-actions/` child module; the
+> upstream deployment guide below is
 > historical and does not describe the private-ALB staging proposal. See
 > [migration report](../../docs/trusted-actions-monorepo-poc.md). Go imports
 > retain the previous module name pending an explicit module rename/release.
