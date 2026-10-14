@@ -1,4 +1,22 @@
-# ROSA Boundary
+# ROSA Boundary and Trusted Actions (monorepo PoC)
+
+This branch colocates two independently built services: Boundary's ephemeral
+investigation environment and the [Trusted Actions API](services/trusted-actions/README.md).
+This is a **local proof of concept**, not a deployed or approved integration.
+Trusted Actions has its own Go module, image, tests, and regional workload state.
+The existing Boundary account and network roots remain the only owners of their
+AWS resources. See [the migration report](docs/trusted-actions-monorepo-poc.md)
+before changing workspaces or attempting an apply.
+
+| Component | Source | Terraform root | Build/test |
+|---|---|---|---|
+| Boundary | `cmd/`, `internal/`, `lambda/`, root `Containerfile` | `deploy/account`, `deploy/network`, `deploy/regional` | root `Makefile` |
+| Trusted Actions | `services/trusted-actions/` | `deploy/trusted-actions` | `make trusted-actions-build`, `make trusted-actions-test`, `make trusted-actions-image` |
+
+Terraform roots have separate state despite sharing a Git repository. Trusted
+Actions depends on the Boundary network and regional task security group; its
+ALB is configured as internal with TLS-only ingress from that group. The API
+still validates JWTs; network reachability alone is **not** caller authorization.
 
 Multi-architecture container and CLI for managing ephemeral SRE investigations on AWS Fargate with OIDC-authenticated access control.
 
@@ -45,31 +63,20 @@ See the [AWS documentation](https://docs.aws.amazon.com/systems-manager/latest/u
 
 ### Deploy Infrastructure
 
-1. Copy the example environment file and fill in values:
-
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Required Terraform variables (no defaults):
-
-   | Variable | Description |
-   |---|---|
-   | `container_image` | Container image URI |
-   | `vpc_id` | VPC for Fargate tasks |
-   | `subnet_ids` | 2+ subnets in the same VPC |
-   | `keycloak_issuer_url` | OIDC issuer URL (e.g., `https://keycloak.example.com/realms/EmployeeIDP`) |
-   | `keycloak_thumbprint` | SHA1 thumbprint of the Keycloak TLS certificate |
-
-3. Deploy:
-
-   ```bash
-   cd deploy/regional && terraform init && terraform apply
-   ```
-
-See [`deploy/regional/README.md`](deploy/regional/README.md) for the complete deployment guide.
+**Do not apply the monorepo PoC to an existing account.** Review
+[`deploy/account/README.md`](deploy/account/README.md),
+[`deploy/regional/README.md`](deploy/regional/README.md),
+[`docs/staging-deployment.md`](docs/staging-deployment.md) and the
+[Trusted Actions ownership handoff](docs/trusted-actions-monorepo-poc.md).
+For Boundary personal development only, use the `deploy/regional/Makefile`
+targets with an approved local configuration. HCP staging runs from Git with
+its own workspace variables, not local `.env` or Makefile commands.
 
 ### OIDC Identity Requirements
+
+The following example is historical; deployment claims and ABAC tags vary.
+Verify current identity behavior in [`deploy/account/`](deploy/account/) and
+[`internal/`](internal/) before onboarding a new IdP.
 
 Keycloak must issue tokens with these claims:
 

@@ -1,5 +1,8 @@
 # ROSA Boundary Access Documentation
 
+For the combined-repository PoC, see the [Trusted Actions migration report](trusted-actions-monorepo-poc.md)
+and [contributor guide](../CONTRIBUTING.md). The PoC is not a live deployment.
+
 This documentation describes the access architecture for ephemeral SRE containers on AWS ECS Fargate, using Keycloak for OIDC authentication and AWS IAM for authorization.
 
 ## System Overview

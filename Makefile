@@ -1,4 +1,15 @@
 # Makefile for building multi-arch ROSA Boundary container
+# Trusted Actions has a separate Go module and container build context.
+.PHONY: trusted-actions-build trusted-actions-test trusted-actions-image
+trusted-actions-build:
+	$(MAKE) -C services/trusted-actions build
+
+trusted-actions-test:
+	cd services/trusted-actions && go test ./...
+
+trusted-actions-image:
+	podman build -f services/trusted-actions/Containerfile -t rosa-trusted-actions:poc services/trusted-actions
+
 IMAGE_NAME := rosa-boundary
 TAG := latest
 FULL_IMAGE := $(IMAGE_NAME):$(TAG)

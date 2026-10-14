@@ -2,6 +2,28 @@
 
 This is a routing guide, not a snapshot of the implementation. Start with the relevant documentation, then verify behavior against current source and tests before changing it. Do not infer current behavior from this file or dated runbooks.
 
+## Monorepo PoC routing
+
+This branch also carries Trusted Actions in `services/trusted-actions/` (separate
+Go module), with its AWS root in `deploy/trusted-actions/`. Start with
+`services/trusted-actions/README.md`, `CONTRIBUTING.md`, and
+`docs/trusted-actions-monorepo-poc.md` for changes spanning both services.
+Run `make trusted-actions-test` (no codegen), or run the service's Make targets
+from its directory for code generation and integration checks. The original
+Boundary root Make targets do not test Trusted Actions.
+
+Never create a second manager for a live AWS resource: account identities and
+budget belong to `deploy/account`, VPC/subnets to `deploy/network`, Boundary
+tasks to `deploy/regional`, and the Trusted Actions API/EC2/ALB to
+`deploy/trusted-actions`. The Trusted Actions HCP meta root is a proposed
+*existing workspace VCS handoff*, not an extra workload workspace to add to
+Boundary's meta root. Do not apply copied configuration against an existing
+workspace/state without a state ownership inventory and reviewed migration plan.
+For a private API, verify TLS, private routing, task SG reference, IAM control
+on SG attachment, and application authentication separately; SG membership
+alone does not establish ECS task identity. No staging or production apply in
+this PoC.
+
 ## Where to look
 
 | Task | Start here | Verify against |
