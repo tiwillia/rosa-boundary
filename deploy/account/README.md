@@ -5,6 +5,58 @@ roles, trust policies, OIDC providers and common AWS-managed policy attachments.
 The account-wide Bedrock monthly budget and model agreements also belong here.
 This baseline adds no audit-reader role and does not manage organization access.
 
+## Staging release records
+
+The account root optionally owns one dedicated S3 bucket in **`us-east-1`**:
+`150100906299-rosa-boundary-stage-us-east-1-release-records`. Its record URI is
+`s3://150100906299-rosa-boundary-stage-us-east-1-release-records/releases/v1/<revision>.json`,
+where `<revision>` is the full 40-character lowercase infrastructure commit SHA.
+Both staging Regions read the same key from this bucket. It is separate from the
+regional content and audit buckets. Terraform manages the bucket and its controls;
+the publisher creates the JSON objects.
+
+| Account input / output | Contract |
+| --- | --- |
+| `enable_release_record_bucket` | Defaults to `false`; enabling requires `stage = "stage"`, `aws_account_id = "150100906299"` and `aws_region = "us-east-1"`. |
+| `release_record_publisher_role_arn` | Exact ARN of an existing, dedicated IAM role in the staging account. No role, trust policy or credentials are created here. |
+| `release_record_bucket_name` (output) | Bucket name when enabled, otherwise `null`. |
+
+Publish with a single SigV4 `PutObject` over HTTPS, `If-None-Match: *`,
+`Content-Type: application/json`, explicit `ServerSideEncryption: AES256` (SSE-S3)
+and expected bucket owner `150100906299`. The publisher has `GetObject` for
+read-back: on `412 Precondition Failed`, accept only byte-identical content;
+never replace a conflicting record. The publisher and consumer must validate
+the hexadecimal SHA; the bucket grant matches the key prefix, length and suffix.
+Store only release metadata, never credentials.
+
+S3 checks the **current** version for [conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html).
+The [bucket policy](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes-enforce.html)
+therefore denies unconditional writes, puts from other principals, creation of
+delete markers, version deletion, replica writes/deletes and lifecycle configuration.
+Versioning, ACL-free ownership, public-access blocking and `prevent_destroy` are
+enabled; no expiry or force-destroy is configured. These guarantees depend on the
+bucket policy remaining in force. Restrict permission to edit it; the publisher
+must not administer S3/IAM or have broader write grants.
+
+**Deployment prerequisites (not enabled by this configuration):**
+
+1. Identify the trusted publisher role and confirm who can assume it. Configure
+   the publisher with the bucket, Region, headers and expected owner above.
+2. Verify the staging regional Terraform **plan and apply** roles can read the
+   release key in `us-east-1` using their existing same-account IAM permissions.
+   The bucket policy grants no general reader access. If a consumer lacks
+   `s3:GetObject`, grant it only to that role on the release-record key pattern;
+   check any additional metadata reads required by the consumer.
+3. Confirm the bucket name is available and no unmanaged records, expiration
+   configuration or policy would be adopted. Review a separate Git-managed
+   enablement for `rosa-boundary-stage-account`, its effective auto-apply
+   settings and its AWS resource plan; complete provisioning before publishing.
+4. After S3 versioning has propagated, verify an approved first write and
+   read-back, duplicate rejection, denied unconditional/other-principal puts
+   and denied deletes (including by version). Verify reads from both regional
+   consumers before switching deployment inputs. Mock plans do not prove these
+   permissions. Keep the bucket enabled for as long as the records are needed.
+
 ## Staging Lambda image repository
 
 `enable_lambda_ecr_source` (off by default) manages the ordinary, private
@@ -50,6 +102,7 @@ to exist.
 
 | Owner | Resources |
 | --- | --- |
+| Account | Optional staging release-record bucket and its access, encryption and versioning controls |
 | Account | Execution, task, shared SRE, invoker, create-investigation Lambda, reaper Lambda, Bedrock logging, optional S3 replication and optional metrics-read role identities/trust |
 | Account | Optional GitHub Actions OIDC provider, content publisher role identities/trust and the dedicated content replication role identity |
 | Account | ECS execution managed-policy attachment and the two Lambda basic-execution attachments |

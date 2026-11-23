@@ -85,7 +85,12 @@ run "account_singletons_and_shared_contract_without_regional_resources" {
       ]) &&
       length(flatten([for f in fileset("${path.module}/modules/shared-iam", "*.tf") : regexall("resource \\\"aws_iam_role_policy_attachment\\\"", file("${path.module}/modules/shared-iam/${f}"))])) == 5 &&
       alltrue([for f in fileset(path.module, "**/*.tf") :
-        length(regexall("terraform_remote_state|aws_ecs_cluster\\.|aws_efs_file_system\\.|aws_s3_bucket\\.|aws_kms_key\\.|aws_cloudwatch_log_group\\.|aws_lambda_function\\.", file("${path.module}/${f}"))) == 0
+        length(regexall("terraform_remote_state|aws_ecs_cluster\\.|aws_efs_file_system\\.|aws_kms_key\\.|aws_cloudwatch_log_group\\.|aws_lambda_function\\.", file("${path.module}/${f}"))) == 0 &&
+        # The staging release-record bucket is account-owned. Keep rejecting
+        # every regional bucket reference, including in release-records.tf.
+        alltrue([for ref in regexall("aws_s3_bucket\\.[\\w-]+", file("${path.module}/${f}")) :
+          f == "release-records.tf" && ref == "aws_s3_bucket.release_records"
+        ])
       ])
     )
     error_message = "Account must not depend on regional resources, import regional policies, or exclusively reconcile shared role grants."
