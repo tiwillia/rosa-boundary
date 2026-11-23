@@ -1,10 +1,25 @@
 """Source-inheritance tests using real Git tree comparisons."""
 
 import subprocess
+import shlex
+from pathlib import Path, PurePosixPath
 
 import pytest
 
-from staging_release_inputs import verify_component_inputs
+from staging_release_inputs import RUNTIME_INPUTS, verify_component_inputs
+
+
+def test_runtime_inputs_cover_local_copies():
+    # A new local COPY must not silently make digest inheritance unsound.
+    for line in (Path(__file__).resolve().parents[1] / "Containerfile").read_text().splitlines():
+        if not line.startswith(("COPY ", "ADD ")):
+            continue
+        args = shlex.split(line)[1:]
+        if any(arg.startswith("--from=") for arg in args):
+            continue
+        for source in (arg for arg in args[:-1] if not arg.startswith("--")):
+            path = PurePosixPath(source)
+            assert any(path.is_relative_to(base) for base in RUNTIME_INPUTS), source
 
 
 def git(repo, *args):
