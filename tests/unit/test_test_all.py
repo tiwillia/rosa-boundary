@@ -80,6 +80,8 @@ def test_full_entrypoint_attempts_all_gates_after_failure(tmp_path, monkeypatch)
     assert gates['shell-format'] == ['shfmt', '-d', '-i', '4', *files[:3]]
     assert gates['shellcheck-all'] == ['shellcheck', *files[:3]]
     assert gates['python-unit'][-1] == f'--junitxml={artifacts / "python-unit.xml"}'
+    assert 'scripts/test_publish_staging_release.py' in gates['python-unit']
+    assert 'scripts/test_staging_release_inputs.py' in gates['python-unit']
     assert "python-unit" in names
     assert "live-tooling-unit" in names
     assert "container-build-both-architectures" in names

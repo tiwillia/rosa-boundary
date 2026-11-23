@@ -211,7 +211,11 @@ def main():
         runner.run(target, [make, target])
     runner.run("localstack-endpoint-unit", ["go", "test", "-tags", "localstack", "./internal/aws", "-run", "^TestIntegrationEndpoint", "-count=1"])
     unit_report = artifacts / "python-unit.xml"
-    runner.run("python-unit", ["uv", "run", "--group", "localstack", "pytest", "tests/unit/", "-v", "-ra", f"--junitxml={unit_report}"])
+    runner.run("python-unit", [
+        "uv", "run", "--group", "localstack", "python", "-m", "pytest", "tests/unit/",
+        "scripts/test_publish_staging_release.py", "scripts/test_staging_release_inputs.py",
+        "-v", "-ra", f"--junitxml={unit_report}",
+    ])
     try:
         status, message = junit_status(unit_report)
         runner.report("python-unit-coverage", status, message)

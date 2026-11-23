@@ -10,7 +10,9 @@ For a component not built at the candidate commit, compare the candidate Git tre
 
 ## Rollout ownership
 
-Treat storage bootstrap, publication, and switching image selection as separate changes. Before enabling record-based selection in either regional workspace, the release-system owner must provide:
+Treat storage bootstrap, publication, and switching image selection as separate changes. See the [publisher contract](../../scripts/staging-release-publisher.md) for the candidate schema and command, and the [account storage interface](../../deploy/account/README.md#staging-release-records) for role and bucket requirements.
+
+Before enabling record-based selection in either regional workspace, the release-system owner must provide:
 
 - A trusted job and short-lived staging publisher identity. The job must bind compatibility and build evidence to the exact candidate; PR code must not be able to publish accepted records. Keep write access out of the regional Terraform roles.
 - Delivery of image-only **and** infrastructure-only candidates. Queue or retry an HCP run for the precise merged configuration version *after* publication; serialize promotions across both staging regions and reject superseded retries. Do not replan `main` by name or assume two workspace queues are a global lock.
