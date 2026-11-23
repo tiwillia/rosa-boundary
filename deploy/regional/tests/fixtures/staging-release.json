@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "infrastructure_revision": "0000000000000000000000000000000000000001",
+  "staging_account_id": "150100906299",
+  "regions": ["us-east-1", "us-west-2"],
+  "release_evidence": {
+    "release_id": "release/42",
+    "compatibility_id": "check/88",
+    "runtime_build_id": "build/123",
+    "lambda_build_id": "build/456"
+  },
+  "runtime": {
+    "repository": "quay.io/redhat-user-workloads/rosa-tenant/rosa-boundary",
+    "source_revision": "0000000000000000000000000000000000000002",
+    "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "lambda": {
+    "repository": "rosa-boundary/create-investigation-lambda",
+    "source_revision": "0000000000000000000000000000000000000003",
+    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

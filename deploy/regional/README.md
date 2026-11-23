@@ -13,8 +13,30 @@ use the account-owned source repository. The account root owns filtered,
 registry-wide image replication, not this state. New source-region pushes after
 replication is enabled can verify delivery; older images require a separate
 backfill if they will be needed at the destination. Neither repository
-provisioning nor replication changes the running Lambda's existing Quay-cache
-image URI. Promote a new URI only after an approved SHA exists in every Region.
+provisioning nor replication updates the running Lambda image.
+
+## Opt-in staging release records
+
+By default this root uses `container_image` and, for Image Lambda packaging,
+`lambda_image_tag`. Setting `staging_release_record_bucket` to
+`150100906299-rosa-boundary-stage-us-east-1-release-records` enables record
+selection **only** for the two Boundary staging regional workspaces. This input
+is unset by default. The run must supply HCP's `TFC_WORKSPACE_NAME` and
+`TFC_CONFIGURATION_VERSION_GIT_COMMIT_SHA` context; do not configure a static
+SHA in workspace variables.
+
+Both Regions read `releases/v1/<configuration-commit>.json` from `us-east-1`
+during planning. Terraform checks the record's revision, account, target Region,
+repositories, digests, source revisions and evidence IDs. Each regional plan
+also looks up the recorded Lambda digest in its own ECR repository before
+selecting it. The task and kube-proxy containers use the recorded Quay digest.
+Verifying Quay availability, compatibility evidence and protection against
+record replacement are responsibilities of the publisher and release controls.
+
+Once enabled, a run without a record for its exact commit fails, including a
+speculative PR plan whose commit has not been published. It cannot use the
+previous release, explicit pins, or a tag as a fallback. Review the speculative
+plan policy and HCP run-context availability before activating this mode.
 
 ## Account identities and regional grants
 

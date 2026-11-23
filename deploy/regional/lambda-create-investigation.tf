@@ -16,10 +16,11 @@ locals {
   lambda_use_image = var.lambda_package_type == "Image"
 
   # Lambda images are published to ordinary ECR in this account and Region.
-  lambda_ecr_image_uri = (
-    local.lambda_use_image
-    ? "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com/${var.project}/create-investigation-lambda:${var.lambda_image_tag}"
-    : ""
+  lambda_ecr_repository = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.region}.amazonaws.com/${var.project}/create-investigation-lambda"
+  lambda_ecr_image_uri = !local.lambda_use_image ? "" : (
+    local.use_staging_release_record
+    ? "${local.lambda_ecr_repository}@${one([for image in data.aws_ecr_image.staging_lambda : image.image_digest])}"
+    : "${local.lambda_ecr_repository}:${var.lambda_image_tag}"
   )
 }
 
@@ -125,12 +126,8 @@ resource "aws_lambda_function" "create_investigation_image" {
 
   lifecycle {
     precondition {
-      condition     = var.lambda_image_tag != ""
-      error_message = "lambda_image_tag is required when lambda_package_type is 'Image'. Use an immutable tag (e.g., git SHA or release version), not 'latest'."
-    }
-    precondition {
-      condition     = can(regex("^[0-9a-f]{40}$", var.lambda_image_tag))
-      error_message = "Lambda images require an immutable 40-character lowercase commit SHA tag."
+      condition     = local.use_staging_release_record || can(regex("^[0-9a-f]{40}$", var.lambda_image_tag))
+      error_message = "Outside staging release record mode Lambda images require an immutable 40-character lowercase commit SHA tag."
     }
   }
 

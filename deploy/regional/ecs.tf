@@ -120,7 +120,7 @@ resource "aws_ecs_task_definition" "rosa_boundary" {
     [
       {
         name  = "rosa-boundary"
-        image = var.container_image
+        image = local.runtime_image
         # Reserve the remaining CPU shares for the interactive workload.
         cpu         = var.container_cpu - (var.enable_kube_proxy ? 2 : 0)
         essential   = true
@@ -216,7 +216,7 @@ resource "aws_ecs_task_definition" "rosa_boundary" {
     var.enable_kube_proxy ? [
       {
         name      = "kube-proxy"
-        image     = var.container_image
+        image     = local.runtime_image
         cpu       = 2
         essential = true
 

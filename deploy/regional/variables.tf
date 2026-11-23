@@ -158,8 +158,37 @@ variable "retention_days" {
 }
 
 variable "container_image" {
-  description = "Container image URI for rosa-boundary"
+  description = "Explicit Boundary container image URI. Required unless staging release record selection is enabled."
   type        = string
+  default     = null
+
+  validation {
+    condition     = var.staging_release_record_bucket != null || try(trimspace(var.container_image) != "", false)
+    error_message = "An explicit container_image is required outside staging release record mode."
+  }
+}
+
+variable "staging_release_record_bucket" {
+  description = "Opt in to using the dedicated staging release record bucket. Null preserves explicit image pins."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.staging_release_record_bucket == null || var.staging_release_record_bucket == "150100906299-rosa-boundary-stage-us-east-1-release-records"
+    error_message = "Only the dedicated staging release record bucket is supported."
+  }
+}
+
+variable "TFC_CONFIGURATION_VERSION_GIT_COMMIT_SHA" {
+  description = "HCP Terraform run-specific VCS commit; required in staging release record mode."
+  type        = string
+  default     = null
+}
+
+variable "TFC_WORKSPACE_NAME" {
+  description = "HCP Terraform workspace name; required in staging release record mode."
+  type        = string
+  default     = null
 }
 
 variable "lambda_package_type" {
@@ -174,7 +203,7 @@ variable "lambda_package_type" {
 }
 
 variable "lambda_image_tag" {
-  description = "Immutable commit SHA tag for the create-investigation Lambda image in ordinary same-account regional ECR. Required when lambda_package_type is 'Image'. Lambda resolves the tag to a digest at deploy time."
+  description = "Immutable commit SHA tag for the create-investigation Lambda image in ordinary same-account regional ECR. Required for Image packaging outside staging release record mode."
   type        = string
   default     = ""
 }
