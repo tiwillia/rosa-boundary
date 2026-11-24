@@ -1,6 +1,6 @@
 # Staging infrastructure and image release coordination
 
-**Status:** Proposal; no solution selected.
+**Status:** Earlier options comparison. The [updated staging promotion-tag proposal](staging-promotion-tags.md) replaces the release-record recommendation below for review.
 
 **Tracking:** [ROSAENG-67168](https://redhat.atlassian.net/browse/ROSAENG-67168)
 
