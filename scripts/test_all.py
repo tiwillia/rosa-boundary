@@ -207,7 +207,7 @@ def main():
     runner = Runner(artifacts)
     files = source_files()
     make = os.environ.get("MAKE", "make")
-    for target in ("test-coverage", "test-lambda-reap-tasks", "test-lambda-reap-investigations", "test-lambda-create-investigation", "test-github-dl", "test-shell", "lint", "staticcheck"):
+    for target in ("test-coverage", "test-lambda-reap-tasks", "test-lambda-reap-investigations", "test-lambda-create-investigation", "test-github-dl", "test-shell", "test-ephemeral-env", "lint", "staticcheck"):
         runner.run(target, [make, target])
     runner.run("localstack-endpoint-unit", ["go", "test", "-tags", "localstack", "./internal/aws", "-run", "^TestIntegrationEndpoint", "-count=1"])
     unit_report = artifacts / "python-unit.xml"

@@ -155,12 +155,46 @@ build-lambda-image: ## Build the create-investigation Lambda container image loc
 
 # Local unit/regression suite. Run sequentially even with make -j: uv commands
 # can sync shared environments. LocalStack, image builds, and lint are separate.
-test: ## Run Go coverage, Lambda, build-helper, and Bats tests
+test: ## Run Go coverage, Lambda, build-helper, Bats, and deployment-tool tests
 	@command -v bats >/dev/null 2>&1 || { echo "ERROR: bats is required (macOS: brew install bats-core; Fedora: dnf install bats)"; exit 1; }
 	$(MAKE) test-coverage
 	$(MAKE) test-lambda
 	$(MAKE) test-github-dl
 	$(MAKE) test-shell
+	$(MAKE) test-ephemeral-env
+
+# Ephemeral combined development deployments. Configuration contains references,
+# never Vault tokens or OAuth client secrets. No inherited repository .env is used.
+EPHEMERAL_CONFIG ?= $(if $(strip $(XDG_CONFIG_HOME)),$(XDG_CONFIG_HOME),$(HOME)/.config)/rosa-boundary/ephemeral-dev.json
+# POSIX id works on Linux/macOS without relying on an inherited USER variable.
+# Keep the exact account name; the orchestrator validates AWS naming limits.
+EPHEMERAL_NAME ?= $(shell id -un 2>/dev/null)
+EPHEMERAL_COMMIT ?=
+EPHEMERAL_ARGS ?=
+
+.PHONY: ephemeral-env ephemeral-env-destroy ephemeral-env-reset ephemeral-env-status test-ephemeral-env
+ephemeral-env: ## Deploy Boundary + Trusted Actions (config path and account name default)
+	@test -n "$(EPHEMERAL_NAME)" || { echo "Set EPHEMERAL_NAME to select an environment; see docs/runbooks/ephemeral-development-environment.md"; exit 1; }
+	@test -n "$(EPHEMERAL_CONFIG)" || { echo "EPHEMERAL_CONFIG must not be empty; omit it to use the default config path"; exit 1; }
+	@python3 scripts/ephemeral_env.py deploy --config "$(EPHEMERAL_CONFIG)" --name "$(EPHEMERAL_NAME)" $(if $(EPHEMERAL_COMMIT),--commit "$(EPHEMERAL_COMMIT)") $(EPHEMERAL_ARGS)
+
+ephemeral-env-destroy: ## Destroy only the recorded ephemeral environment
+	@test -n "$(EPHEMERAL_NAME)" || { echo "Set EPHEMERAL_NAME to select an environment"; exit 1; }
+	@test -n "$(EPHEMERAL_CONFIG)" || { echo "EPHEMERAL_CONFIG must not be empty; omit it to use the default config path"; exit 1; }
+	@python3 scripts/ephemeral_env.py destroy --config "$(EPHEMERAL_CONFIG)" --name "$(EPHEMERAL_NAME)" $(EPHEMERAL_ARGS)
+
+ephemeral-env-status: ## Show recorded deployment status (not a live health assertion)
+	@test -n "$(EPHEMERAL_NAME)" || { echo "Set EPHEMERAL_NAME to select an environment"; exit 1; }
+	@test -n "$(EPHEMERAL_CONFIG)" || { echo "EPHEMERAL_CONFIG must not be empty; omit it to use the default config path"; exit 1; }
+	@python3 scripts/ephemeral_env.py status --config "$(EPHEMERAL_CONFIG)" --name "$(EPHEMERAL_NAME)" $(EPHEMERAL_ARGS)
+
+ephemeral-env-reset: ## Archive an unused local deployment record (no AWS operations)
+	@test -n "$(EPHEMERAL_NAME)" || { echo "Set EPHEMERAL_NAME to select an environment"; exit 1; }
+	@test -n "$(EPHEMERAL_CONFIG)" || { echo "EPHEMERAL_CONFIG must not be empty; omit it to use the default config path"; exit 1; }
+	@python3 scripts/ephemeral_env.py reset --config "$(EPHEMERAL_CONFIG)" --name "$(EPHEMERAL_NAME)" $(EPHEMERAL_ARGS)
+
+test-ephemeral-env: ## Test deployment orchestration without AWS resources
+	python3 -m unittest discover -s scripts -p 'test_ephemeral_*.py' -v
 
 # Run all independent gates and preserve their logs, including failures.
 # LocalStack must already be running; TEST_ALL_ARGS=--require-complete rejects skips.
@@ -309,8 +343,17 @@ help:
 	@echo ""
 	@echo "Local Test Suite (no LocalStack or AWS required):"
 	@echo "  make test-all        - All local checks; requires running LocalStack and Terraform access"
-	@echo "  make test            - Go coverage, Lambda, build-helper, and Bats tests"
+	@echo "  make test            - Go coverage, Lambda, build-helper, Bats, and deployment-tool tests"
 	@echo "  make test-shell      - Shell runtime and startup regression tests"
+	@echo "  make test-ephemeral-env - Deployment-tool unit tests (no AWS resources)"
+	@echo ""
+	@echo "Ephemeral Development Environment (Boundary + Trusted Actions):"
+	@echo "  make ephemeral-env         - Deploy from working tree (optional EPHEMERAL_COMMIT)"
+	@echo "  make ephemeral-env-status  - Show recorded deployment status"
+	@echo "  make ephemeral-env-destroy - Destroy the recorded ephemeral environment"
+	@echo "  make ephemeral-env-reset   - Archive an unused local record only (no AWS operations)"
+	@echo "  EPHEMERAL_NAME defaults to id -un; EPHEMERAL_CONFIG defaults to the Boundary config directory's ephemeral-dev.json"
+	@echo "  See docs/runbooks/ephemeral-development-environment.md"
 	@echo ""
 	@echo "Go CLI Targets:"
 	@echo "  make build-cli       - Build the rosa-boundary CLI binary (./bin/rosa-boundary)"

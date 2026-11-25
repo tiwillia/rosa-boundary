@@ -6,6 +6,7 @@ This is a routing guide, not a snapshot of the implementation. Start with the re
 
 | Task | Start here | Verify against |
 |------|------------|----------------|
+| Ephemeral development environment (both components) | [Joint runbook](docs/runbooks/ephemeral-development-environment.md) | `scripts/ephemeral_env.py`, `scripts/ephemeral_environment/`, all five Terraform roots |
 | Boundary architecture, identity, investigations, audit | [Boundary docs index](docs/README.md) | Boundary code in root `internal/`, `lambda/`, `deploy/`, and the entrypoint |
 | Boundary CLI and user workflows | [CLI authentication](docs/architecture/cli-authentication.md), [runbooks](docs/runbooks/investigation-workflow.md) | Root `internal/` and CLI tests |
 | Boundary container and shell | [development standards](docs/development-standards.md) | Root `Containerfile`, `entrypoint.sh`, `skel/`, `build/`, shell tests |

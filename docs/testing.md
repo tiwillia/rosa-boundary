@@ -33,6 +33,10 @@ Coverage includes:
 
 - Go tests/coverage; all three Lambda suites and create-investigation coverage;
   build-helper tests; every Bats suite, including socket-discovery regressions.
+- Offline [joint-environment](runbooks/ephemeral-development-environment.md)
+  orchestration tests (`make test-ephemeral-env`).
+  These exercise tool safety/contracts without deploying AWS, fetching real
+  service credentials or running cluster actions; they do not prove live readiness.
 - `tests/unit/` (including the test-all runner tests) and offline live-verification
   tooling tests. These tooling tests do not run live AWS verification.
 - Go lint, Staticcheck, ShellCheck on all repository shell scripts and the

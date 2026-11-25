@@ -72,6 +72,12 @@ variable "enable_worm" {
   default     = false
 }
 
+variable "ephemeral_environment" {
+  description = "Allow Terraform to empty the dev artifact/audit bucket during destruction. Object Lock and any explicitly enabled WORM retention remain unchanged. Never enable on an existing persistent deployment."
+  type        = bool
+  default     = false
+}
+
 variable "retention_days" {
   description = "WORM object lock retention period in days (COMPLIANCE mode)."
   type        = number

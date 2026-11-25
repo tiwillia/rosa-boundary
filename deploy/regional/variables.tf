@@ -29,17 +29,22 @@ variable "aws_region" {
 }
 
 variable "rta_server_url" {
-  description = "Trusted Actions HTTPS origin for the investigation CLI, without an API path. Empty leaves RTA_SERVER unset. Configure only where private DNS, TLS and network access to that TA deployment are available."
+  description = "Trusted Actions origin for the investigation CLI, without an API path. Empty leaves RTA_SERVER unset. HTTPS is required except for explicitly ephemeral dev deployments, which may use private HTTP with unencrypted bearer tokens."
   type        = string
   default     = ""
   nullable    = false
 
   validation {
     condition = var.rta_server_url == "" || can(regex(
-      "^https://([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\\.)*[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(:[0-9]{1,5})?/?$",
+      "^https?://([A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?\\.)*[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(:[0-9]{1,5})?/?$",
       var.rta_server_url
     ))
-    error_message = "rta_server_url must be empty or an HTTPS DNS origin (optionally a port and trailing slash), with no credentials, API path, whitespace, query or fragment."
+    error_message = "rta_server_url must be empty or an HTTP(S) DNS origin (optionally a port and trailing slash), with no credentials, API path, whitespace, query or fragment."
+  }
+
+  validation {
+    condition     = !startswith(var.rta_server_url, "http://") || (var.ephemeral_environment && var.stage == "dev")
+    error_message = "HTTP rta_server_url is allowed only with ephemeral_environment = true and stage = dev; other deployments require HTTPS."
   }
 
   validation {
@@ -144,6 +149,12 @@ variable "bedrock_budget_notification_email" {
     condition     = can(regex("^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$", var.bedrock_budget_notification_email))
     error_message = "The Bedrock budget notification destination must be an email address."
   }
+}
+
+variable "ephemeral_environment" {
+  description = "Opt in to an ephemeral dev audit bucket without Object Lock retention. Never enable on an existing persistent deployment."
+  type        = bool
+  default     = false
 }
 
 variable "retention_days" {

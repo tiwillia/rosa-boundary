@@ -3,6 +3,7 @@ package rta
 
 import (
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -42,10 +43,12 @@ func NewCommand() *cobra.Command {
 	root.PersistentFlags().Duration("timeout", defaultTimeout, "Deadline for non-interactive operations")
 	root.PersistentFlags().String("server", "", "RTA API server URL (env: RTA_SERVER)")
 	root.PersistentFlags().String("token", "", "Bearer token for authentication (default: OCM config)")
+	root.PersistentFlags().Bool("allow-insecure-http", false, "Allow unencrypted HTTP for disposable development environments (env: RTA_ALLOW_INSECURE_HTTP)")
 
 	_ = config.BindPFlag("verbose", root.PersistentFlags().Lookup("verbose"))
 	_ = config.BindPFlag("timeout", root.PersistentFlags().Lookup("timeout"))
 	_ = config.BindPFlag("server", root.PersistentFlags().Lookup("server"))
+	_ = config.BindPFlag("allow_insecure_http", root.PersistentFlags().Lookup("allow-insecure-http"))
 
 	g := &commandGroup{
 		config:  config,
@@ -84,7 +87,17 @@ func (g *commandGroup) newClient(cmd *cobra.Command, requireAuth bool) (*Client,
 	} else if t := fromFlag(cmd, "token"); t != "" {
 		opts = append(opts, WithToken(t))
 	}
-	return NewClient(g.config.GetString("server"), opts...)
+	if g.config.GetBool("allow_insecure_http") {
+		opts = append(opts, WithInsecureHTTP())
+	}
+	client, err := NewClient(g.config.GetString("server"), opts...)
+	if err != nil {
+		return nil, err
+	}
+	if u, _ := url.Parse(client.base); client.allowInsecureHTTP && u.Scheme == "http" {
+		cmd.PrintErrln("WARNING: insecure HTTP enabled; bearer tokens and data are sent unencrypted. Use only in disposable development environments.")
+	}
+	return client, nil
 }
 
 func fromFlag(cmd *cobra.Command, name string) string {

@@ -15,8 +15,16 @@ locals {
 resource "aws_s3_bucket" "app" {
   bucket              = local.s3_bucket_name
   object_lock_enabled = true
+  force_destroy       = var.ephemeral_environment
 
   tags = { Name = local.s3_bucket_name, Environment = var.environment }
+
+  lifecycle {
+    precondition {
+      condition     = !var.ephemeral_environment || var.environment == "dev"
+      error_message = "ephemeral_environment is permitted only when environment is dev."
+    }
+  }
 }
 
 resource "aws_s3_bucket_versioning" "app" {

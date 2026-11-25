@@ -1,7 +1,15 @@
 # S3 bucket for audit logs with WORM compliance
 resource "aws_s3_bucket" "audit" {
-  bucket = local.bucket_name
-  tags   = local.common_tags
+  bucket        = local.bucket_name
+  force_destroy = var.ephemeral_environment
+  tags          = local.common_tags
+
+  lifecycle {
+    precondition {
+      condition     = !var.ephemeral_environment || var.stage == "dev"
+      error_message = "ephemeral_environment is permitted only when stage is dev."
+    }
+  }
 }
 
 # Enable versioning (required for object lock)
@@ -15,6 +23,7 @@ resource "aws_s3_bucket_versioning" "audit" {
 
 # Enable object lock with compliance mode (WORM)
 resource "aws_s3_bucket_object_lock_configuration" "audit" {
+  count  = var.ephemeral_environment ? 0 : 1
   bucket = aws_s3_bucket.audit.id
 
   rule {
@@ -27,6 +36,11 @@ resource "aws_s3_bucket_object_lock_configuration" "audit" {
   # Object lock must be enabled at bucket creation
   # This will fail if the bucket already exists without object lock
   depends_on = [aws_s3_bucket_versioning.audit]
+}
+
+moved {
+  from = aws_s3_bucket_object_lock_configuration.audit
+  to   = aws_s3_bucket_object_lock_configuration.audit[0]
 }
 
 # Block all public access

@@ -50,6 +50,7 @@ The accepted CLI contract is tracked separately in [proposal PR #354](https://gi
 - [**User Access Guide**](runbooks/user-access-guide.md) - Step-by-step guide for end users
 - [**Investigation Workflow**](runbooks/investigation-workflow.md) - Creating and managing investigations
 - [**Audit Log Access**](runbooks/audit-log-access.md) - Retrieve investigation audit logs from S3 without admin access
+- [**Ephemeral Development Environment**](runbooks/ephemeral-development-environment.md) - Joint Boundary+TA personal deployment and teardown; no cluster required
 - [**Personal Dev Bootstrap**](runbooks/personal-dev-bootstrap.md) - Deploy and validate a contributor-owned dev environment
 - [**Seed Personal Dev Content**](runbooks/seed-dev-content.md) - Manually publish approved synthetic S3 fixtures and verify mounted content and agent skill discovery
 - [**Troubleshooting**](runbooks/troubleshooting.md) - Common issues and solutions

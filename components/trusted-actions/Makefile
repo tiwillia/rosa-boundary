@@ -18,6 +18,11 @@ MOCK_BACKPLANE_PORT ?= 8087
 PROXY_BACKPLANE_DIR=./tests/proxy-backplane
 PROXY_BACKPLANE_PORT ?= 8088
 
+# Component-local image context; no GoReleaser or API regeneration required.
+IMAGE_NAME := rosa-trusted-actions
+TAG := latest
+AMD64_IMAGE := $(IMAGE_NAME):$(TAG)-amd64
+
 # Tools
 OAPI_CODEGEN=go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
 GO_LINT=golangci-lint
@@ -105,6 +110,11 @@ build-rta: download-goreleaser ## Build only the rta client binary (snapshot, cu
 .PHONY: build-server
 build-server: generate download-goreleaser ## Build only the server binary (snapshot, current OS/arch)
 	$(GORELEASER) build --snapshot --clean --single-target --id server
+
+# Container images
+.PHONY: build-amd64
+build-amd64: ## Build the Trusted Actions server AMD64 image (IMAGE_NAME, TAG)
+	podman build --platform linux/amd64 -t $(AMD64_IMAGE) -f Containerfile .
 
 # Run
 .PHONY: run

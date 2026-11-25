@@ -26,6 +26,9 @@ likely belong under `components/boundary/` in a separately validated layout refa
 Contributors: start with [CONTRIBUTING.md](CONTRIBUTING.md) for mise setup,
 LocalStack access, and the complete local test command.
 
+For an ephemeral personal AWS environment containing Boundary and Trusted
+Actions, see the [joint development runbook](docs/runbooks/ephemeral-development-environment.md).
+
 ### Prerequisites
 
 - Go 1.27.4 or newer to build from source (minimum declared in [`go.mod`](go.mod))

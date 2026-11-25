@@ -7,14 +7,61 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
 
+	boundaryconfig "github.com/openshift-online/rosa-boundary/internal/config"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
+
+func TestEphemeralManualProfileUpsertPreservesOtherProfiles(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	stage := boundaryconfig.Profile{AccountID: "111111111111", Environment: "stage", AWSRegion: "us-east-1"}
+	dev := boundaryconfig.Profile{AccountID: "123456789012", Environment: "dev", AWSRegion: "us-east-1"}
+	file := &boundaryconfig.ProfilesFile{
+		ActiveProfile: "stage",
+		Profiles:      map[string]boundaryconfig.Profile{"stage": stage, "dev": dev},
+	}
+	if err := boundaryconfig.SaveProfiles(file); err != nil {
+		t.Fatal(err)
+	}
+	// Both first registration and a later redeploy must preserve active/other profiles.
+	for _, region := range []string{"us-east-2", "us-west-2"} {
+		_, err := runTestCLI(t, "config", "init", "--name", "tiwillia",
+			"--auto-discover=false", "--overwrite", "--yes", "--use-device-code=false",
+			"--account-id", "123456789012", "--region", region, "--project", "eph-tiwillia",
+			"--environment", "dev", "--keycloak-url", "https://identity.example.test",
+			"--realm", "development", "--client-id", "rosa-boundary-sre",
+			"--ocm-url", "https://api.integration.openshift.com",
+			"--lambda-function-name", "create", "--invoker-role-arn", "arn:aws:iam::123456789012:role/invoker",
+			"--sre-role-arn", "arn:aws:iam::123456789012:role/sre",
+			"--ecs-cluster", "ecs", "--efs-filesystem-id", "fs-test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := boundaryconfig.LoadProfiles()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.ActiveProfile != "stage" || len(got.Profiles) != 3 {
+			t.Fatalf("changed selection or lost profiles: active=%q, count=%d", got.ActiveProfile, len(got.Profiles))
+		}
+		if !reflect.DeepEqual(got.Profiles["stage"], stage) || !reflect.DeepEqual(got.Profiles["dev"], dev) {
+			t.Fatal("unrelated profile changed")
+		}
+		profile := got.Profiles["tiwillia"]
+		if profile.AWSRegion != region || profile.OCMURL != "https://api.integration.openshift.com" {
+			t.Fatal("deployment profile was not updated")
+		}
+		if profile.OIDCUseDeviceCode == nil || *profile.OIDCUseDeviceCode {
+			t.Fatal("explicit browser flow was not saved")
+		}
+	}
+}
 
 func TestConfigInitDoesNotInheritIssuerFromExistingProfileOrEnvironment(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())

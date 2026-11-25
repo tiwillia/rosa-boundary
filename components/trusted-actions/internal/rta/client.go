@@ -18,11 +18,12 @@ const basePath = "/api/v0/trusted-actions"
 type TokenProvider func(ctx context.Context) (string, error)
 
 type Client struct {
-	base          string
-	tokenProvider TokenProvider
-	http          *http.Client
-	userAgent     string
-	cleaner       func()
+	base              string
+	tokenProvider     TokenProvider
+	http              *http.Client
+	userAgent         string
+	cleaner           func()
+	allowInsecureHTTP bool
 }
 
 type ClientOption func(*Client)
@@ -45,23 +46,48 @@ func WithCleaner(cleaner func()) ClientOption {
 	return func(c *Client) { c.cleaner = cleaner }
 }
 
+// WithInsecureHTTP permits credentials on the initial plain HTTP URL for
+// disposable development environments. It does not relax TLS verification or
+// permit redirects from HTTPS to HTTP.
+func WithInsecureHTTP() ClientOption {
+	return func(c *Client) { c.allowInsecureHTTP = true }
+}
+
 func NewClient(serverURL string, opts ...ClientOption) (*Client, error) {
 	if serverURL == "" {
 		return nil, fmt.Errorf("server URL is required; set --server or RTA_SERVER")
 	}
 	serverURL = strings.TrimRight(serverURL, "/")
+	u, err := url.Parse(serverURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
+		return nil, fmt.Errorf("server URL must be an absolute HTTP or HTTPS URL")
+	}
 
 	c := &Client{
 		base:      serverURL + basePath,
-		http:      &http.Client{CheckRedirect: rejectHTTPSDowngrade},
+		http:      &http.Client{},
 		userAgent: userAgent(),
 	}
 	for _, o := range opts {
 		o(c)
 	}
-	if c.tokenProvider != nil && !isSecureOrLoopback(serverURL) {
+	if c.tokenProvider != nil && !isSecureOrLoopback(serverURL) && !c.allowInsecureHTTP {
 		return nil, fmt.Errorf("refusing to send credentials over plain HTTP to %s; use HTTPS or a loopback address", serverURL)
 	}
+	// Preserve caller-supplied transports and redirect policies without allowing
+	// them to bypass downgrade protection or mutating a shared HTTP client.
+	hc := *c.http
+	checkRedirect := hc.CheckRedirect
+	hc.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if err := rejectHTTPSDowngrade(req, via); err != nil {
+			return err
+		}
+		if checkRedirect != nil {
+			return checkRedirect(req, via)
+		}
+		return nil
+	}
+	c.http = &hc
 	return c, nil
 }
 
@@ -82,6 +108,9 @@ func isSecureOrLoopback(rawURL string) bool {
 	}
 	if u.Scheme == "https" {
 		return true
+	}
+	if u.Scheme != "http" {
+		return false
 	}
 	host := u.Hostname()
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"

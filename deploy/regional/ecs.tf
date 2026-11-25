@@ -173,6 +173,13 @@ resource "aws_ecs_task_definition" "rosa_boundary" {
             name  = "RTA_SERVER"
             value = trimsuffix(var.rta_server_url, "/")
           }
+          ], var.ephemeral_environment && var.stage == "dev" && startswith(var.rta_server_url, "http://") ? [
+          {
+            # Only disposable dev opts into sending bearer tokens over HTTP.
+            name  = "RTA_ALLOW_INSECURE_HTTP"
+            value = "true"
+          }
+          ] : [
         ])
 
         mountPoints = concat([

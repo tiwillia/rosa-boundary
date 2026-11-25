@@ -93,7 +93,7 @@ run "default_omits_rta_server" {
   assert {
     condition = alltrue([
       for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) :
-      alltrue([for item in container.environment : item.name != "RTA_SERVER"])
+      alltrue([for item in container.environment : !contains(["RTA_SERVER", "RTA_ALLOW_INSECURE_HTTP"], item.name)])
     ])
     error_message = "An unset RTA origin must not emit RTA_SERVER in any container."
   }
@@ -133,11 +133,91 @@ run "configured_origin_only_reaches_main_container" {
     condition = alltrue(flatten([
       for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) : [
         for item in container.environment :
-        !contains(["OCM_CONFIG", "OCM_KEYRING", "RTA_TIMEOUT"], item.name)
+        !contains(["OCM_CONFIG", "OCM_KEYRING", "RTA_TIMEOUT", "RTA_ALLOW_INSECURE_HTTP"], item.name)
       ]
     ]))
     error_message = "Configuring RTA_SERVER must not introduce OCM credential or RTA timeout overrides."
   }
+}
+
+run "ephemeral_dev_http_explicitly_opts_in_only_the_main_container" {
+  command = plan
+  variables {
+    ephemeral_environment = true
+    stage                 = "dev"
+    rta_server_url        = "http://internal-ta-123.us-east-1.elb.amazonaws.com"
+  }
+  assert {
+    condition = [
+      for item in one([
+        for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) :
+        container if container.name == "rosa-boundary"
+      ]).environment : item.value if item.name == "RTA_ALLOW_INSECURE_HTTP"
+    ] == ["true"]
+    error_message = "Only ephemeral HTTP dev tasks must explicitly permit authenticated RTA over HTTP."
+  }
+  assert {
+    condition = [
+      for item in one([
+        for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) :
+        container if container.name == "rosa-boundary"
+      ]).environment : item.value if item.name == "RTA_SERVER"
+    ] == ["http://internal-ta-123.us-east-1.elb.amazonaws.com"]
+    error_message = "HTTP dev tasks must receive the private ALB origin."
+  }
+  assert {
+    condition = alltrue([
+      for item in one([
+        for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) :
+        container if container.name == "kube-proxy"
+      ]).environment : !contains(["RTA_SERVER", "RTA_ALLOW_INSECURE_HTTP"], item.name)
+    ])
+    error_message = "The sidecar must receive neither the RTA origin nor its HTTP exception."
+  }
+}
+
+run "ephemeral_dev_https_never_opts_into_insecure_http" {
+  command = plan
+  variables {
+    ephemeral_environment = true
+    stage                 = "dev"
+    rta_server_url        = "https://rta.example.com"
+  }
+  assert {
+    condition = alltrue(flatten([
+      for container in jsondecode(aws_ecs_task_definition.rosa_boundary.container_definitions) :
+      [for item in container.environment : item.name != "RTA_ALLOW_INSECURE_HTTP"]
+    ]))
+    error_message = "TLS dev tasks must not inherit the HTTP exception."
+  }
+}
+
+run "stage_http_is_rejected" {
+  command = plan
+  variables {
+    stage          = "stage"
+    rta_server_url = "http://rta.example.com"
+  }
+  expect_failures = [var.rta_server_url]
+}
+
+run "prod_http_is_rejected" {
+  command = plan
+  variables {
+    stage          = "prod"
+    rta_server_url = "http://rta.example.com"
+  }
+  expect_failures = [var.rta_server_url]
+}
+
+run "ephemeral_http_still_rejects_api_paths" {
+  command = plan
+  variables {
+    ephemeral_environment = true
+    stage                 = "dev"
+    rta_server_url        = "http://rta.example.com/api"
+  }
+  expect_failures = [var.rta_server_url]
 }
 
 run "trailing_slash_is_normalized" {

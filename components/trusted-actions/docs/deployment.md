@@ -1,5 +1,8 @@
 # Deployment
 
+For ephemeral personal AWS development with Boundary and Trusted Actions, see
+the [joint runbook](../../../docs/runbooks/ephemeral-development-environment.md).
+
 ## Overview
 
 Infrastructure is split into two Terraform roots that must be applied in order:
